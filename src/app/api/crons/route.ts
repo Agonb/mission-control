@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { readFileSync } from "fs";
-import { execSync } from "child_process";
 
 export const dynamic = "force-dynamic";
 
+const CRON_CACHE = "/data/mission-control/crons.json";
+const WORKSPACE_CRONS = "/root/.openclaw/workspace/data/crons.json";
+
 export async function GET() {
   try {
-    const raw = execSync("openclaw cron list --json 2>/dev/null || echo '[]'", { timeout: 10000 }).toString();
-    let data: any[];
-    try { data = JSON.parse(raw); } catch { data = []; }
+    let raw = "[]";
+    for (const path of [CRON_CACHE, WORKSPACE_CRONS]) {
+      try { raw = readFileSync(path, "utf-8"); break; } catch {}
+    }
+    const data: any[] = JSON.parse(raw);
 
     const jobs = data.map((j: any) => ({
       name: j.name || j.id?.slice(0, 8),

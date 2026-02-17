@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 
 export const dynamic = "force-dynamic";
 
-const TODO_PATH = "/root/.openclaw/workspace/projects/TODO.md";
+const TODO_PATH = process.env.TODO_PATH || "/root/.openclaw/workspace/projects/TODO.md";
 
 export async function GET() {
   try {
