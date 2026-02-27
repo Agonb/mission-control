@@ -8,34 +8,19 @@ interface Signal {
   reason: string;
   timestamp: string;
   timeframe: string;
+  price?: number;
+  rsi?: number | null;
+  macro_verdict?: string;
+  in_position?: boolean;
 }
 
-const mockSignals: Signal[] = [
-  {
-    agent: "Trend Agent",
-    verdict: "HOLD",
-    confidence: 45,
-    reason: "Daily trend neutral. Price consolidating between 95k-100k. EMA 20 flat, no crossover signal. Waiting for breakout confirmation above 101k or breakdown below 94k.",
-    timestamp: "2h ago",
-    timeframe: "1D",
-  },
-  {
-    agent: "Momentum Agent",
-    verdict: "LONG",
-    confidence: 62,
-    reason: "4H showing higher lows since Monday. MACD histogram turning positive. Volume increasing on green candles. RSI at 58 — room to run before overbought.",
-    timestamp: "4h ago",
-    timeframe: "4H",
-  },
-  {
-    agent: "Contrarian Agent",
-    verdict: "HOLD",
-    confidence: 38,
-    reason: "F&G index at 55 (Neutral). No extreme sentiment to fade. Funding rates slightly positive (0.01%) — no crowded trade. Waiting for extremes.",
-    timestamp: "4h ago",
-    timeframe: "Multi",
-  },
-];
+interface SignalResponse {
+  signals: Signal[];
+  consensus: string;
+  avgConfidence: number;
+  lastUpdate: string;
+  macro?: { verdict: string; score: number; context: string } | null;
+}
 
 const verdictColors = {
   LONG: { bg: "var(--success-dim)", text: "var(--success)", bar: "var(--success)" },
@@ -44,24 +29,26 @@ const verdictColors = {
 };
 
 export default function SignalPanel() {
-  const [signals, setSignals] = useState<Signal[]>(mockSignals);
+  const [data, setData] = useState<SignalResponse | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchSignals = () => {
     fetch("/api/signals")
       .then((r) => r.json())
-      .then((data) => { if (data.signals?.length) setSignals(data.signals); })
-      .catch(() => {});
-  }, []);
-
-  const consensus = () => {
-    const scores: Record<string, number> = {};
-    signals.forEach(s => { scores[s.verdict] = (scores[s.verdict] || 0) + s.confidence; });
-    return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || "HOLD";
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
   };
 
-  const avgConfidence = Math.round(signals.reduce((a, s) => a + s.confidence, 0) / signals.length);
-  const con = consensus();
+  useEffect(() => {
+    fetchSignals();
+    const interval = setInterval(fetchSignals, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const signals = data?.signals || [];
+  const consensus = data?.consensus || "HOLD";
+  const avgConfidence = data?.avgConfidence || 0;
 
   return (
     <div className="card card-accent">
@@ -72,60 +59,79 @@ export default function SignalPanel() {
             <span className="text-[10px] text-[var(--text-muted)]">CONSENSUS</span>
             <span
               className="px-3 py-1 rounded-md text-xs font-bold mono"
-              style={{ background: verdictColors[con as keyof typeof verdictColors]?.bg, color: verdictColors[con as keyof typeof verdictColors]?.text }}
+              style={{ background: verdictColors[consensus as keyof typeof verdictColors]?.bg, color: verdictColors[consensus as keyof typeof verdictColors]?.text }}
             >
-              {con}
+              {consensus}
             </span>
           </div>
           <div className="text-right">
             <span className="mono text-xs text-[var(--text-muted)]">avg conf </span>
             <span className="mono text-sm font-medium text-[var(--text-secondary)]">{avgConfidence}%</span>
           </div>
+          <span className="w-2 h-2 rounded-full bg-[var(--accent)] pulse-dot" />
         </div>
       </div>
 
-      <div className="space-y-3">
-        {signals.map((s) => {
-          const vc = verdictColors[s.verdict];
-          const isExpanded = expanded === s.agent;
-          return (
-            <div
-              key={s.agent}
-              className="bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer transition-all hover:bg-[var(--bg-card-hover)]"
-              onClick={() => setExpanded(isExpanded ? null : s.agent)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: vc.bg }}>
-                    {s.verdict === "LONG" ? "🐂" : s.verdict === "SHORT" ? "🐻" : "⏸️"}
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium text-[var(--text-primary)]">{s.agent}</span>
-                    <span className="text-[10px] text-[var(--text-muted)] ml-2 mono">{s.timeframe}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold mono" style={{ background: vc.bg, color: vc.text }}>
-                    {s.verdict}
-                  </span>
-                  <div className="w-20">
-                    <div className="w-full h-1.5 rounded-full bg-[var(--bg-primary)] overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${s.confidence}%`, background: vc.bar }} />
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="shimmer h-20 w-full" />)}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {signals.map((s) => {
+            const vc = verdictColors[s.verdict];
+            const isExpanded = expanded === s.agent;
+            return (
+              <div
+                key={s.agent}
+                className="bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer transition-all hover:bg-[var(--bg-card-hover)]"
+                onClick={() => setExpanded(isExpanded ? null : s.agent)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: vc.bg }}>
+                      {s.verdict === "LONG" ? "🐂" : s.verdict === "SHORT" ? "🐻" : "⏸️"}
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{s.agent}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] ml-2 mono">{s.timeframe}</span>
+                      {s.price && <span className="text-[10px] text-[var(--text-muted)] ml-2 mono">${s.price.toLocaleString()}</span>}
                     </div>
                   </div>
-                  <span className="mono text-xs text-[var(--text-muted)] w-8 text-right">{s.confidence}%</span>
+                  <div className="flex items-center gap-3">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold mono" style={{ background: vc.bg, color: vc.text }}>
+                      {s.verdict}
+                    </span>
+                    <div className="w-20">
+                      <div className="w-full h-1.5 rounded-full bg-[var(--bg-primary)] overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${s.confidence}%`, background: vc.bar }} />
+                      </div>
+                    </div>
+                    <span className="mono text-xs text-[var(--text-muted)] w-8 text-right">{s.confidence}%</span>
+                  </div>
                 </div>
+                {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">{s.reason}</p>
+                    <div className="flex gap-4 mt-2">
+                      {s.rsi && <span className="text-[10px] text-[var(--text-muted)]">RSI: {s.rsi.toFixed(1)}</span>}
+                      {s.macro_verdict && <span className="text-[10px] text-[var(--text-muted)]">Macro: {s.macro_verdict}</span>}
+                      {s.in_position && <span className="text-[10px] text-[var(--success)]">● In position</span>}
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)] mt-1 block">{s.timestamp}</span>
+                  </div>
+                )}
               </div>
-              {isExpanded && (
-                <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">{s.reason}</p>
-                  <span className="text-[10px] text-[var(--text-muted)] mt-2 block">Signal generated {s.timestamp}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
+
+      {data?.lastUpdate && (
+        <div className="mt-3 text-right">
+          <span className="text-[10px] text-[var(--text-muted)]">Last update: {new Date(data.lastUpdate).toLocaleTimeString()}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,36 +4,39 @@ import { useState, useEffect } from "react";
 interface MarketData {
   fearGreed: number;
   fearGreedLabel: string;
-  btcDominance: number;
+  btcDominance: string;
   totalMarketCap: string;
   funding: number;
 }
 
-const defaultData: MarketData = {
-  fearGreed: 55,
-  fearGreedLabel: "Neutral",
-  btcDominance: 61.2,
-  totalMarketCap: "$3.2T",
-  funding: 0.01,
-};
-
 export default function MarketPulse() {
-  const [data, setData] = useState<MarketData>(defaultData);
+  const [data, setData] = useState<MarketData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/market")
       .then((r) => r.json())
-      .then((d) => { if (d.fearGreed) setData(d); })
-      .catch(() => {});
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
-  const fgColor = data.fearGreed <= 25 ? "var(--danger)" : data.fearGreed <= 45 ? "var(--warning)" : data.fearGreed <= 55 ? "var(--text-secondary)" : data.fearGreed <= 75 ? "var(--success)" : "var(--success)";
+  if (loading || !data) {
+    return (
+      <div className="card">
+        <h3 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-4">Market Pulse</h3>
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => <div key={i} className="shimmer h-8 w-full" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const fgColor = data.fearGreed <= 25 ? "var(--danger)" : data.fearGreed <= 45 ? "var(--warning)" : data.fearGreed <= 55 ? "var(--text-secondary)" : "var(--success)";
 
   return (
     <div className="card">
       <h3 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-4">Market Pulse</h3>
 
-      {/* Fear & Greed gauge */}
       <div className="bg-[var(--bg-secondary)] rounded-lg p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-[var(--text-muted)]">Fear & Greed</span>
@@ -55,7 +58,6 @@ export default function MarketPulse() {
         </div>
       </div>
 
-      {/* Metrics */}
       <div className="space-y-2">
         <div className="flex justify-between items-center py-1.5">
           <span className="text-xs text-[var(--text-muted)]">BTC Dominance</span>
